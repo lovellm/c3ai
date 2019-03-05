@@ -70,7 +70,7 @@ function CurlMaker(){
    * Make multiple curl commands based on a dictionary of canonicals and files.
    * @param {Object} canonicalFileName Dictionary of cannical name and filename.
    * For Each key, will create a curl for a canonical of that key and filename of its value.
-   * @returns {[string]} Array of curl commands.
+   * @returns {string[]} Array of curl commands.
    */
   var _makeCurls = function(canonicalFileName) {
     canonicalFileName = canonicalFileName || {}
@@ -81,7 +81,7 @@ function CurlMaker(){
    * @function makeCurlAllFSC
    * Makes a curl command for each FileSourceCollection that
    * was not created by 'authorizer'.
-   * @returns {[string]} Array of curl commands.
+   * @returns {string[]} Array of curl commands.
    */
   var _makeCurlAllFSC = function() {
     let fsc = _allFileSourceCollection() || []
@@ -91,7 +91,7 @@ function CurlMaker(){
    * @function makeCurlAllCanonical
    * Makes a curl command for each canonical of the current package.
    * Assumes a FileSourceCollection exists for each.
-   * @returns {[string]} Array of curl commands.
+   * @returns {string[]} Array of curl commands.
    */
   var _makeCurlAllCanonical = function() {
     let c = _packageCanonicals() || []
@@ -111,7 +111,7 @@ function CurlMaker(){
   /**
    * Get the id of all FileSourceCollection not made by 'authorizer' (default ones).
    * @private
-   * @returns {[string]} Array of ids
+   * @returns {string[]} Array of ids
    */
   var _allFileSourceCollection = function() {
     //Get all FileSourceCollections not made by 'authorizer' (default ones)
@@ -121,15 +121,15 @@ function CurlMaker(){
   /**
    * Gets all canonicals in the current package.
    * @private
-   * @returns {[string]} Array of Canonical names
+   * @returns {string[]} Array of Canonical names
    */
   var _packageCanonicals = function() {
     //Get the root package (deployed package) for the current tag
     let tag = MetadataStore.tag()
-    let package = tag.rootPackage()
-    package = package.name || null
+    let p = tag.rootPackage()
+    p = p.name || null
     //List all types in this package
-    let allTypes = package ? tag.typesByPackage(package) : []
+    let allTypes = p ? tag.typesByPackage(p) : []
     //List all 'canonical' types
     let cTypes = tag.typesThatMixin({typeName:'Canonical'})
     //Filter canonicals types down to only ones in current package

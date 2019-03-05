@@ -15,10 +15,10 @@ function makeFileSourceCollections(fileSystem,jmsDisabled) {
   var jms = jmsDisabled || false;
   //Get the root package (deployed package) for the current tag
   var tag = MetadataStore.tag();
-  var package = tag.rootPackage();
-  package = package.name || null;
+  var p = tag.rootPackage();
+  p = p.name || null;
   //List all types in this package
-  var allTypes = package ? tag.typesByPackage(package) : [];
+  var allTypes = p ? tag.typesByPackage(p) : [];
   //List all 'canonical' types
   var cTypes = tag.typesThatMixin({typeName:'Canonical'});
   //Filter canonicals types down to only ones in current package

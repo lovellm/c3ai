@@ -10,10 +10,10 @@ function TransactionsToSeries(){
     return new TransactionsToSeries()
   }
 
-  var _data = {values: {}, series: {}};
+  var _data = {values: {}, series: {}, rel: {}, norm: {}};
   var _objs = {objs: null, group: null, props: null};
   var _ts = {};
-  var _valid = {objs: false, ts: false};
+  var _valid = {objs: false, ts: false, rel: false, norm: false};
 
   /**
    * Makes sure the key exists in _data.values.
@@ -42,11 +42,21 @@ function TransactionsToSeries(){
     }
   }
   /**
+   * Invalidate and Clear the derived series (relative/normalized)
+   */
+  var _invalidateDerived = function(){
+    _valid.rel = false;
+    _valid.norm = false;
+    _data.rel = {};
+    _data.norm = {};
+  }
+  /**
    * Updates the series data with an EvalMetricsResult
    */
   var _processTs = function() {
     if ( _valid.ts ) { return this;}
     _valid.ts = true;
+    _invalidateDerived();
     var data = _ts;
     if( !data.result ) {
       return this;
@@ -106,6 +116,7 @@ function TransactionsToSeries(){
   var _processObjs = function() {
     if ( _valid.objs ) { return this; }
     _valid.objs = true;
+    _invalidateDerived();
     if ( !_objs.objs || _objs.objs.length < 1 ) { return this; }
     var props = _objs.props;
     var group = _objs.group;
@@ -173,6 +184,72 @@ function TransactionsToSeries(){
     _clear();
     _processObjs();
     _processTs();
+    return {
+      values: _data.values,
+      series: _data.series
+    };
+  }
+  /**
+   * Makes a version of _data.values where each value is a relative change from a reference point
+   */
+  var _relativeChange = function(ref) {
+    if ( _valid.rel !== false && ((ref||true) === _valid.rel ) ) { 
+      return { rel: _data.rel, series: _data.series };
+    }
+    _process();
+    _valid.rel = ref || true;
+    var base = {};
+    _data.rel = {}; //Should already be an empty object, but just incase...
+    if ( ref ) {
+      base = _.find(_data.values, function(o){ return o.key===ref; }) || {};
+    }
+    var values = _.sortBy(_data.values, 'key');
+    //Iterate all period values
+    _.each(values, function(period) {
+      //Make sure this period exist sin the relative data
+      if ( typeof _data.rel[period.key] === 'undefined' ) {
+        _data.rel[period.key] = {};
+      }
+      var relPeriod = _data.rel[period.key];
+      //Iterate all series
+      _.each(_data.series, function(series) {
+        //Iterate each point within the series
+        _.each(series.points, function(point) {
+          if ( typeof period[point] !== 'undefined' ) {
+            //No base value for this point, set it as the base
+            if ( typeof base[point] === 'undefined' ) {
+              base[point] = period[point];
+            }
+            //If no base, set relative point as null
+            if ( !base[point] ) { relPeriod[point] = null; }
+            //Otherwise, set relative point as difference from base point
+            else { 
+              relPeriod[point] = (period[point] - base[point]) / base[point];
+            }
+          }
+        });
+      });
+    });
+    return {
+      rel: _data.rel,
+      series: _data.series
+    };
+  }
+  /**
+   * Normalize the data (all values between 0=Min of the series and 1=Max of the series)
+   */
+  var _normalize = function() {
+    if ( _valid.norm ) { 
+      return { norm: _data.norm, series: _data.series };
+    }
+    _process();
+    _valid.norm = true;
+    _data.norm = {}; //Should already be an empty object, but just incase...
+
+    return {
+      norm: _data.norm,
+      series: _data.series
+    };
   }
   //Make the Object to return
   //Define Getter/Setters
@@ -221,13 +298,14 @@ function TransactionsToSeries(){
       }
       return _ts;
     },
-    series: function() {
-      _process();
-      return _data;
-    }
+    _objs: function() { return _objs; },
+    _ts: function() { return _ts; },
+    _data: function() { return _data; },
+    _valid: function() { return _valid; }
   }
   //Expose other functions that need to be exposed
-
+  _self.series = _process;
+  _self.relative = _relativeChange;
   /* Set the returned object's prototype to this prototype
    * All it really does is make instanceof return true */
   _self.__proto__ = this.__proto__;

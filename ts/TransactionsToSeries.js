@@ -9,12 +9,23 @@ function TransactionsToSeries(){
   if ( ! (this instanceof TransactionsToSeries) ){
     return new TransactionsToSeries()
   }
-
+  //Processed data
   var _data = {values: {}, series: {}, rel: {}, norm: {}};
+  //Raw input Transaction data
   var _objs = {objs: null, group: null, props: null};
+  //Raw input Timeseries data
   var _ts = {};
+  //Keep track of processed data state to prevent re-processing when not needed
   var _valid = {objs: false, ts: false, rel: false, norm: false};
-
+  //Utility function to Get Nested key by string
+  var _get = function( obj, accessor ) {
+    return ( accessor || undefined )
+      && _.reduce(
+          accessor.split('.'),
+          function (prev, curr) { return prev && prev[curr] },
+          obj
+      );
+  }
   /**
    * Makes sure the key exists in _data.values.
    * @param {string} dateKey String representation of the date key
@@ -32,17 +43,25 @@ function TransactionsToSeries(){
     return _data.values[dateKey];
   }
   /**
-   * If data is invalid (needs to be recalculated), resets it to empty state
+   * If either the transaction data or timeseries data are marked as invalid,
+   * sets bot has invalid and removes processed data for them.
+   * Can be invalid if for the following reasons:
+   * * Never Processed Yet
+   * * New data was given
+   * * Group or properties were updated
    */
   var _clear = function() {
     if ( !_valid.objs || !_valid.ts ) {
       _valid.objs = false;
       _valid.ts = false;
       _data = {values: {}, series: {}};
+      _invalidateDerived();
     }
   }
   /**
-   * Invalidate and Clear the derived series (relative/normalized)
+   * Mark the derived series (relative/normalized) as invalid.
+   * Set them to an empty object, ready to be re-created when needed.
+   * This should be called any time _data.values is changed.
    */
   var _invalidateDerived = function(){
     _valid.rel = false;
@@ -130,7 +149,7 @@ function TransactionsToSeries(){
     //Iterate Each Transaction
     _.each(_objs.objs, function(o) {
       //Prepare Date Related Things
-      var date = o[dateProp];
+      var date = _get(o,dateProp);
       if ( !(date instanceof Date) ) {
         date = new Date(date);
       }
@@ -140,7 +159,7 @@ function TransactionsToSeries(){
       var key = '';
       if ( group && group.length > 0) {
         group.forEach(function(g) {
-          key += (o[g] || '');
+          key += (_get(o,g) || '');
         })
       } else { key = 'ALL'; }
       if ( typeof _data.series[key] === 'undefined' ) {
@@ -150,7 +169,7 @@ function TransactionsToSeries(){
           points: {}
         };
         _.each(group, function(g) {
-          _data.series[key].names[g] = (o[g] || '');
+          _data.series[key].names[g] = (_get(o,g) || '');
         });
         if (valueProp) { _data.series[key].points.value = key; }
         if (qtyProp) { _data.series[key].points.qty = key+'Q'; }
@@ -160,15 +179,15 @@ function TransactionsToSeries(){
       //Add up data
       if ( valueProp ) {
         if ( typeof period[key] === 'undefined' ) { period[key] = 0; }
-        period[key] += (o[valueProp] || 0);
+        period[key] += (_get(o,valueProp) || 0);
       }
       if ( qtyProp ) {
         if ( typeof period[key+'Q'] === 'undefined' ) { period[key+'Q'] = 0; }
-        period[key+'Q'] += (o[qtyProp] || 0);
+        period[key+'Q'] += (_get(o,qtyProp) || 0);
       }
       if ( spendProp ) {
         if ( typeof period[key+'S'] === 'undefined' ) { period[key+'S'] = 0; }
-        period[key+'S'] += (o[spendProp] || 0);
+        period[key+'S'] += (_get(o,spendProp) || 0);
       }
       if ( qtyProp && spendProp ) {
         if ( !period[key+'Q'] ) { period[key+'P'] = null; }
@@ -226,6 +245,9 @@ function TransactionsToSeries(){
             else { 
               relPeriod[point] = (period[point] - base[point]) / base[point];
             }
+          } else {
+            //Set to null if no point
+            relPeriod[point] = null;
           }
         });
       });
@@ -245,15 +267,77 @@ function TransactionsToSeries(){
     _process();
     _valid.norm = true;
     _data.norm = {}; //Should already be an empty object, but just incase...
-
+    var ranges = {};
+    //First Pass, get ranges
+    //Iterate all period values
+    _.each(_data.values, function(period) {
+      //Iterate all series
+      _.each(_data.series, function(series) {
+        //Iterate each point within the series
+        _.each(series.points, function(point) {
+          if ( typeof ranges[point] === 'undefined' ) {
+            ranges[point] = { min: null, max: null };
+          }
+          //Make sure this point has data, otherwise ignore it
+          if ( typeof period[point] !== 'undefined' && period[point] !== null ) {
+            //Update min/max as needed
+            if ( ranges[point].min === null || period[point] < ranges[point].min ) {
+              ranges[point].min = period[point];
+            }
+            if ( ranges[point].max === null || period[point] > ranges[point].max ) {
+              ranges[point].max = period[point];
+            }
+          }
+        }); //End each point
+      }); //End each series
+    }); //End each period
+    //Second Pass, Make Norms
+    //Iterate all period values
+    _.each(_data.values, function(period) {
+      //Make sure this period exist sin the relative data
+      if ( typeof _data.norm[period.key] === 'undefined' ) {
+        _data.norm[period.key] = {};
+      }
+      var normPeriod = _data.norm[period.key];
+      //Iterate all series
+      _.each(_data.series, function(series) {
+        //Iterate each point within the series
+        _.each(series.points, function(point) {
+          if ( typeof ranges[point] === 'undefined' || !ranges[point].max ) {
+            //Somehow no ranges for this point, make null
+            normPeriod[point] = null;
+          } else {
+            var p = period[point];
+            if ( p === null || typeof p === 'undefined' ) {
+              normPeriod[point] = null;
+            } else {
+              p -= ranges[point].min;
+              p /= (ranges[point].max-ranges[point].min);
+              normPeriod[point] = p;
+            }
+          }
+        });
+      });
+    });
     return {
       norm: _data.norm,
-      series: _data.series
+      series: _data.series,
+      ranges: ranges
     };
   }
-  //Make the Object to return
-  //Define Getter/Setters
+  /**
+   * The returned object.
+   * @borrows _normalize as normalized
+   * @borrows _relativeChange as relative
+   * @borrows _process as series
+   */
   var _self = {
+    /**
+     * Set or Get the transaction data
+     * @param {Object[]} _ Array of Objects, each representing a transaction
+     * @returns if _ given, returns `this` for chaining.
+     * Otherwise, returns the current transaction data.
+     */
     data: function(_) {
       if (_) {
         _objs.objs = _;
@@ -262,6 +346,12 @@ function TransactionsToSeries(){
       }
       return _objs.objs;
     },
+    /**
+     * Set or Get the grouping fields to use for transaction data
+     * @param {string[]} _ Array of strings, each being part of the aggregation group for transactions.
+     * @returns if _ given, returns `this` for chaining.
+     * Otherwise, returns the current group data.
+     */
     group: function(_) {
       if (_) {
         _objs.group = _;
@@ -271,16 +361,16 @@ function TransactionsToSeries(){
       return _objs.group;
     },
     /**
-     * Set/Get the props related to Transaction processing
+     * Set/Get the props related to Transaction processing.
+     * At least one of prop.value, props.qty, props.spend is required.
+     * If both props.qty and props.spend are given, a price value will be automatically generated.
      * @param {Object} props Properties to Drive Behavior.
-     * Must contain a property specifiying the date column
-     * * dateField
-     * 
-     * At least one of the following must exist, representing the associated column name in the data.
-     * * value
-     * * qty
-     * * spend
-     * @returns reference to this if param was given, otherwise current props
+     * @param {string} props.dateField Required. Which property in the data represents the date
+     * @param {string} props.value Which property in the data to use as a generic value
+     * @param {string} props.qty Which property in the data to use as a quantity value
+     * @param {string} props.spend Which property in the data to use as a spend value
+     * @returns if _ given, returns `this` for chaining.
+     * Otherwise, returns the current props data.
      */
     props: function(_) {
       if (_) {
@@ -290,6 +380,12 @@ function TransactionsToSeries(){
       }
       return _objs.props;
     },
+    /**
+     * Set/Get the Timeseries data.
+     * @param {EvalMetricsResult} _ The result of an `evalMetrics` call. Must contain the `result` property.
+     * @returns if _ given, returns `this` for chaining.
+     * Otherwise, returns the current ts data.
+     */
     ts: function(_) {
       if (_) {
         _ts = _;
@@ -301,11 +397,11 @@ function TransactionsToSeries(){
     _objs: function() { return _objs; },
     _ts: function() { return _ts; },
     _data: function() { return _data; },
-    _valid: function() { return _valid; }
+    _valid: function() { return _valid; },
+    series: _process,
+    relative: _relativeChange,
+    normalized: _normalize
   }
-  //Expose other functions that need to be exposed
-  _self.series = _process;
-  _self.relative = _relativeChange;
   /* Set the returned object's prototype to this prototype
    * All it really does is make instanceof return true */
   _self.__proto__ = this.__proto__;

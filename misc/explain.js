@@ -49,7 +49,7 @@ function Explain(type, spec){
   _.each(plan.bindVars,(o,i)=>{binds[i]=o.value})
   //Replace short-circuit condition
   var sql = plan.sql;
-  sql = sql.replace(/1=0 AND | AND 1=0|\(1=0\) AND/,'');
+  sql = sql.replace(/\(1=0\) AND |1=0 AND | AND \(1=0\)| AND 1=0/,'');
   //Get the plan
   var dbPlan = DbAdmin.explainStmt(sql,binds);
   //See if any indexes were used

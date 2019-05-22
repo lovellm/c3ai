@@ -37,8 +37,8 @@ function SFUtils(){
    * Returns SourceFile status information
    * @param {Object} options Optional Parameters that drive behavior
    * @param {string} options.canonical If given, only SourceFiles for this canonical
-   * @param {string} options.status If given, only SourceFiles with this status
-   * @param {string|Date} options.oldest If given, only SourceFiles updated or or newer than this date
+   * @param {(string|string[])} options.status If given, only SourceFiles with this status
+   * @param {(string|Date)} options.oldest If given, only SourceFiles updated or or newer than this date
    * @param {int} options.limit If given, limit to this number of results. Default 30
    * @returns
    * An array of SourceFile instances.
@@ -52,7 +52,11 @@ function SFUtils(){
       filter += '&&(sourceCollection=="'+options.canonical+'")';
     }
     if ( options.status ) {
-      filter += '&&(status=="'+options.status+'")';
+      if ( Array.isArray(options.status) ) {
+        filter += '&&(intersects(status,["'+options.status.join('","')+'"]))';
+      } else {
+        filter += '&&(status=="'+options.status+'")';
+      }
     }
     if ( options.oldest ) {
       if ( options.oldest.toISOString ) { options.oldest = options.oldest.toISOString() }
@@ -88,24 +92,24 @@ function SFUtils(){
    * Checks for any physically existing files that do not
    * have a SourceFile record and creates a record for them.
    * Conditionally processes those files based on the parameter.
-   * @param {string|string[]} canonicals
+   * @param {(string|string[])} canonicals
    * A string representing a Canonical Name
    * or
    * An array of strings representing multple Canonical names
-   * @param {boolean|string|Date} process
+   * @param {(boolean|number)} process
    * If falsey, will not process the syncd canonicals, will need to done manually.
    * If the boolean `true`, will process all newly synced files.
-   * If a string or Date, will attempt to cast as a date (`new Date()`).
-   * Any file older than the date will not be processed,
-   * on or newer than the date will be processed.
-   * @returns Count of files that were synced
+   * If a number, it is an age in days. 1 means 1 day ago, 7 means 7 days ago, etc.
+   * Any file older will not be processed, newer will be.
+   * If given and neither a boolean or a number, will default to 1.
+   * @returns Array of strings, the filenames of files that were synced
    */
   function syncFiles (canonicals, process) {
     if (!canonicals) { throw ERR_NO_CANONICAL }
     if ( typeof canonicals === 'string' ) { canonicals = [canonicals.toString()] }
     if ( !Array.isArray(canonicals ) ) { throw ERR_NO_CANONICAL }
     process = process || false;
-    var count = 0;
+    var newFiles = [];
     //Check each provided canonical
     canonicals.forEach(function(c) {
       //Get the actual files and the sourceFile records
@@ -115,7 +119,6 @@ function SFUtils(){
       let sfDict = {};
       sf.forEach((f)=>{ sfDict[f.id]=true });
       //Track any actual file that is not a SourceFile
-      var newFiles = [];
       files.forEach((f)=>{
         if ( !sfDict[f] ) { newFiles.push(f); }
       });
@@ -129,12 +132,11 @@ function SFUtils(){
       if ( process ) {
         //Process is truthy, maybe process it
         if ( process !== true) {
-          //It is not the boolean true, assume a date-like thing
-          let dt = null;
-          //For simplicity, just make a new date from it
-          try { dt = new DateTime(fileDate); }
-          //Do nothing if a date cannot be made
-          catch (e) { return; }
+          //It is not the boolean true, assume days old
+          //Default to 1 if not a number
+          if ( isNaN(process) ) { process = 1 }
+          let dt = (new DateTime()).withoutZone().clearTime();
+          dt = dt.addDays(-1*process);
           //Do nothing if the file is older than the date
           if ( sf.lastModified < dt ) { return; }
         }
@@ -143,7 +145,7 @@ function SFUtils(){
         //sf.process();
       }
     });//END forEach newFiles
-    return count;
+    return newFiles;
   }
   utils.syncFiles = syncFiles;
 
@@ -154,7 +156,7 @@ function SFUtils(){
    * @param {string} url fully qualified encoded path, including scheme
    * @returns true if it called `delete`, false otherwise
    */
-  function deleteFile(canonical, url) {
+  function deleteActualFile (canonical, url) {
     if (!url) { return false }
     //Get the canonical root url for verification
     if (!canonical) { throw ERR_NO_CANONICAL }
@@ -169,7 +171,59 @@ function SFUtils(){
     //file.delete();
     return true;
   }
-  utils.deleteFile = deleteFile;
+  utils.deleteActualFile = deleteActualFile;
+
+  /**
+   * Delete the given SourceFile record
+   * @param {string} id SourceFile id
+   * @returns true if it called remove, otherwise false
+   */
+  function deleteSourceFile (id) {
+    if (!id) { return false }
+    let sf = SourceFile.get(id);
+    if ( !sf ) { return false }
+    sf.remove();
+    return true;
+  }
+  utils.deleteSourceFile = deleteSourceFile;
+
+  /**
+   * Process (or re-process) a SourceFile record.
+   * If the status is currently `initial`, it will process it.
+   * Otherwise it will first resume it to reset it to `initial`, then process it.
+   * @param {string} id SourceFile id
+   * @returns true if process was called
+   */
+  function processFile (id) {
+    if (!id) { return false }
+    let sf = SourceFile.get(id);
+    if (!sf) { return false }
+    if ( sf.status !== SourceFileStatus.INITIAL ) {
+      sf = sf.resume();
+    }
+    //Make sure resume resulted in initial
+    if ( sf.status === SourceFileStatus.INITIAL ) {
+      sf.process();
+      return true;
+    }
+    //Could happen if resume resulted in a rejected status
+    return false;
+  }
+  utils.processFile = processFile;
+
+  /**
+   * Calls `stop` on the given file.
+   * @param {string} id SourceFile id
+   * @returns true if stop was called
+   */
+  function stopFile (id) {
+    if (!id) { return false }
+    let sf = SourceFile.get(id);
+    if (!sf) { return false }
+    sf.stop();
+    return true;
+  }
+  utils.stopFile = stopFile;
 
   utils.__proto__ = this.__proto__;
   //Return the object

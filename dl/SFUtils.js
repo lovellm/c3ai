@@ -39,14 +39,14 @@ function SFUtils(){
    * @param {string} options.canonical If given, only SourceFiles for this canonical
    * @param {string} options.status If given, only SourceFiles with this status
    * @param {string|Date} options.oldest If given, only SourceFiles updated or or newer than this date
-   * @param {int} options.limit If given, limit to this number of results. Default 100
+   * @param {int} options.limit If given, limit to this number of results. Default 30
    * @returns
    * An array of SourceFile instances.
    */
   function getSourceFiles (options) {
     options = options || {};
     let filter = '(1==1)';
-    let limit = options.limit || 100;
+    let limit = options.limit || 30;
     let order = 'descending(meta.updated)';
     if ( options.canonical ) {
       filter += '&&(sourceCollection=="'+options.canonical+'")';
@@ -146,6 +146,30 @@ function SFUtils(){
     return count;
   }
   utils.syncFiles = syncFiles;
+
+  /**
+   * Physically deletes a file from the storage mechanism (blob).
+   * The file must exist within the path of the given canonical or it will not delete.
+   * @param {string} canonical A valid FileSourceCollection id, to which the given url belongs
+   * @param {string} url fully qualified encoded path, including scheme
+   * @returns true if it called `delete`, false otherwise
+   */
+  function deleteFile(canonical, url) {
+    if (!url) { return false }
+    //Get the canonical root url for verification
+    if (!canonical) { throw ERR_NO_CANONICAL }
+    let fsc = FileSourceCollection.get(canonical);
+    if (!fsc) { throw ERR_NO_CANONICAL }
+    let root = fsc.rootUrl();
+    //If url does not belong to canonical, do nothing
+    if ( !url.startsWith(root) ) { return false }
+    let file = File.make({url: url});
+    //If file does not exist, do nothing
+    if ( !file.exists() ) { return false }
+    //file.delete();
+    return true;
+  }
+  utils.deleteFile = deleteFile;
 
   utils.__proto__ = this.__proto__;
   //Return the object

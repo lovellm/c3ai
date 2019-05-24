@@ -128,7 +128,6 @@ function SFUtils(){
       console.log('Sync: '+f);
       //Sync the new file
       let sf = SourceFile.syncFile({url:f});
-      count++;
       if ( process ) {
         //Process is truthy, maybe process it
         if ( process !== true) {

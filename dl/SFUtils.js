@@ -102,9 +102,12 @@ function SFUtils(){
    * If a number, it is an age in days. 1 means 1 day ago, 7 means 7 days ago, etc.
    * Any file older will not be processed, newer will be.
    * If given and neither a boolean or a number, will default to 1.
+   * @param {string} contentType
+   * If provided, attempts to replace the pysical file's content type with the given one, before syncing.
+   * For example: `text/csv;delimiter=","` if the file should be a csv delimited by comma.
    * @returns Array of strings, the filenames of files that were synced
    */
-  function syncFiles (canonicals, process) {
+  function syncFiles (canonicals, process, contentType) {
     if (!canonicals) { throw ERR_NO_CANONICAL }
     if ( typeof canonicals === 'string' ) { canonicals = [canonicals.toString()] }
     if ( !Array.isArray(canonicals ) ) { throw ERR_NO_CANONICAL }
@@ -125,6 +128,17 @@ function SFUtils(){
     });//END forEach canonicals
     //Handle all the new files
     newFiles.forEach((f)=>{
+      if ( contentType ) {
+        //Content Type was given, update the file with it
+        console.log('Setting '+contentType+' for '+f);
+        let file = File.make({url: f});
+        //Read existing metadata
+        file = file.readMetadata();
+        if ( file.contentType !== contentType ) {
+          //Only update contentType if different
+          file.replaceContentType(contentType);
+        }
+      }//End if contentType
       console.log('Sync: '+f);
       //Sync the new file
       let sf = SourceFile.syncFile({url:f});

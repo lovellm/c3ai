@@ -130,13 +130,13 @@ function SFUtils(){
     newFiles.forEach((f)=>{
       if ( contentType ) {
         //Content Type was given, update the file with it
-        console.log('Setting '+contentType+' for '+f);
         let file = File.make({url: f});
         //Read existing metadata
         file = file.readMetadata();
         if ( file.contentType !== contentType ) {
           //Only update contentType if different
           file.replaceContentType(contentType);
+          console.log('Setting '+contentType+' for '+f);
         }
       }//End if contentType
       console.log('Sync: '+f);
@@ -155,7 +155,7 @@ function SFUtils(){
         }
         console.log('Process: ' +f);
         //Made it this far, process the file
-        //sf.process();
+        sf.process();
       }
     });//END forEach newFiles
     return newFiles;
@@ -181,7 +181,7 @@ function SFUtils(){
     let file = File.make({url: url});
     //If file does not exist, do nothing
     if ( !file.exists() ) { return false }
-    //file.delete();
+    file.delete();
     return true;
   }
   utils.deleteActualFile = deleteActualFile;

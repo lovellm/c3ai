@@ -1,0 +1,63 @@
+/**
+ * Application uploaded reference files
+ */
+entity type ReferenceFile schema name "REF_FILE" {
+  /**
+   * Create File
+   * @param file instance of ReferenceFile to be created.
+   * Required Attributes:
+   *
+   * * page.id - Will fail if not given.
+   * * name - Will fail if not given.
+   * * contentType - Will fail if not given.
+   * * lastModified - not strictly required, will be now if not given.
+   * * size - not strictly required, will be 0 if not given.
+   * @param content The file content, as a binary (base64 string if api called)
+   * @returns
+   * The URL of the created file
+   */
+  createFile: function(file: !ReferenceFile, content: binary): string js server
+  /**
+   * Convenience wrapper around Merge.
+   * @param file id must be given. Updates existing record.
+   * @param remove If true, delete the file.
+   */
+  editFile: function(file: !ReferenceFile, remove: boolean): ReferenceFile js server
+
+  /**
+   * The file URL
+   */
+  id: ~
+  /**
+   * The page identifer this file belongs to
+   */
+  page: ReferencePage
+  /**
+   * File Name
+   */
+  name: ~
+  /**
+   * A description of the file
+   */
+  description: string
+  /**
+   * An additional note/alert about the file
+   */
+  note: string
+  /**
+   * File's last modified date (from upload source)
+   */
+  lastModified: datetime
+  /**
+   * File Size in Bytes
+   */
+  size: integer
+  /**
+   * The 'effective' date to determine 'current' version
+   */
+  effectiveDate: datetime
+  /**
+   * MIME type of the file
+   */
+  contentType: string
+}

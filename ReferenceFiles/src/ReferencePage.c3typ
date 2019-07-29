@@ -1,0 +1,22 @@
+/**
+ * A 'page' of reference files.
+ */
+@db(shortId=true, shortIdPrefix='P', shortIdSuffixType='numeric')
+entity type ReferencePage schema name "REF_PAGE" {
+  /**
+   * Page identifier
+   */
+  id: ~
+  /**
+   * Display name of the page
+   */
+  name: ~
+  /**
+   * Description of the page
+   */
+  description: string
+  /**
+   * Use this to sort the page. Smaller numbers first
+   */
+  sort: int
+}

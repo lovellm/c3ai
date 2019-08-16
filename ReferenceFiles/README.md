@@ -33,6 +33,7 @@ The files in the `src` folder should be copied to anywhere within your C3 applic
 We recommend putting them in their own subfolder.
 
 The files in the `ui` folder should be copied to anywhere within your application's UI source folder.
+We recommend putting them in their own subfolder.
 You will need to import a reference to them in your code, but othewise the location does not matter.
 
 If not already there, the following will need to be added to your React UI's `package.json`.

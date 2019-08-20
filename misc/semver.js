@@ -23,9 +23,9 @@ var semverUtil = function() {
     //Sort the array
     return l.sort(function(a,b) {
       //If prop is a string, assume is property name on each element
-      if ( typeof prop === 'string' ) { return semverCompare(a[prop], b[prop], desc); }
+      if ( typeof prop === 'string' ) { return compare(a[prop], b[prop], desc); }
       //If prop is function, call it for each element
-      if ( typeof prop === 'function' ) { return semverCompare(prop(a), prop(b), desc); }
+      if ( typeof prop === 'function' ) { return compare(prop(a), prop(b), desc); }
       //Otherwise, assume element is a string
       return compare(a, b, desc);
     });

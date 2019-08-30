@@ -4,6 +4,7 @@
  * * contentType
  * * delimiter
  * * c3auth
+ * * use78 - Set to true if using 7.8, creating auth token will fail
  * Available methods for making curls:
  * * makeCurl
  * * makeCurls
@@ -12,38 +13,39 @@
  * @constructor
  * @example
  * //Overwrite default configurations.
- * var curl = new CurlMaker()
- * curl.contentType('text/csv').delimiter(',').c3auth('ExistingAuthToken')
+ * var curl = new CurlMaker();
+ * curl.contentType('text/csv').delimiter(',').c3auth('ExistingAuthToken');
  * @example
  * //Make a curl command
- * var curl = new CurlMaker()
- * curl.makeCurl('CanonicalMyCanonical','MyFileName.csv')
+ * var curl = new CurlMaker();
+ * curl.makeCurl('CanonicalMyCanonical','MyFileName.csv');
  * @example
  * //Make multiple curl commands
- * var curl = new CurlMaker()
+ * var curl = new CurlMaker();
  * curl.makeCurls({
  *   'Canonical1': 'FileName1.csv',
  *   'Canonical2': 'FileName2.csv',
  *   'Canonical3': 'FileName3.csv'
- * })
+ * });
  */
 function CurlMaker(){
   /* If 'new' was not used, use it. Makes sure 'this' refers to instance scope */
   if ( ! (this instanceof CurlMaker) ){
-    return new CurlMaker()
+    return new CurlMaker();
   }
   //Some Config Things
-  var _tokenMinutes = 240
-  var _contentType = 'text/csv'
-  var _delimiter  = ','
+  var _tokenMinutes = 240;
+  var _contentType = 'text/csv';
+  var _delimiter  = ',';
   //Current Context
-  var _context = ActionContext.dump()
-  var _user = _context.userName
-  var _tenant = _context.tenant
-  var _tag = _context.tag
-  var _host = _context.hostUrl
+  var _context = ActionContext.dump();
+  var _user = _context.userName;
+  var _tenant = _context.tenant;
+  var _tag = _context.tag;
+  var _host = _context.hostUrl;
+  var _use78 = false;
   //Auth Token
-  var _c3auth = null
+  var _c3auth = null;
   /**
    * @function makeCurl
    * Make a curl command for a single canonical and filename.
@@ -54,16 +56,20 @@ function CurlMaker(){
    * @returns {string} The curl command.
    */
   var _makeCurl = function(canonical, fileName) {
-    canonical = canonical || 'CanonicalName'
-    fileName = fileName || 'FileName.csv'
+    canonical = canonical || 'CanonicalName';
+    fileName = fileName || 'FileName.csv';
     if ( !_c3auth ) {
-      _c3auth = Authenticator.generateC3AuthToken(_user,null,_tokenMinutes)
+      if ( _use78 ) {
+        _c3auth = Authenticator.generateC3AuthToken(_user,null,_tokenMinutes); //This version for 7.8
+      } else {
+        _c3auth = Authenticator.generateC3AuthToken(null,_tokenMinutes); //This version for 7.9
+      }
     }
-    let url = _curlUrl(canonical, fileName)
-    let contentType = 'Content-Type: '+_contentType+';delimiter="'+_delimiter+'"'
+    let url = _curlUrl(canonical, fileName);
+    let contentType = 'Content-Type: '+_contentType+';delimiter="'+_delimiter+'"';
     let c = 'curl -v -H \''+contentType+'\' -X PUT --data-binary @./'+fileName
-      +' '+url+' --cookie "c3auth='+_c3auth+'"'
-    return c
+      +' '+url+' --cookie "c3auth='+_c3auth+'"';
+    return c;
   }
   /**
    * @function makeCurls
@@ -73,9 +79,9 @@ function CurlMaker(){
    * @returns {string[]} Array of curl commands.
    */
   var _makeCurls = function(canonicalFileName) {
-    canonicalFileName = canonicalFileName || {}
-    var canonicals = Object.keys(canonicalFileName)
-    return canonicals.map((o)=>_makeCurl(o,canonicalFileName[o]))
+    canonicalFileName = canonicalFileName || {};
+    var canonicals = Object.keys(canonicalFileName);
+    return canonicals.map((o)=>_makeCurl(o,canonicalFileName[o]));
   }
   /**
    * @function makeCurlAllFSC
@@ -84,8 +90,8 @@ function CurlMaker(){
    * @returns {string[]} Array of curl commands.
    */
   var _makeCurlAllFSC = function() {
-    let fsc = _allFileSourceCollection() || []
-    return fsc.map((o)=>_makeCurl(o,null))
+    let fsc = _allFileSourceCollection() || [];
+    return fsc.map((o)=>_makeCurl(o,null));
   }
   /**
    * @function makeCurlAllCanonical
@@ -94,8 +100,8 @@ function CurlMaker(){
    * @returns {string[]} Array of curl commands.
    */
   var _makeCurlAllCanonical = function() {
-    let c = _packageCanonicals() || []
-    return c.map((o)=>_makeCurl(o,null))
+    let c = _packageCanonicals() || [];
+    return c.map((o)=>_makeCurl(o,null));
   }
   /**
    * Make the file import url for a curl command.
@@ -104,9 +110,9 @@ function CurlMaker(){
    * @param {string} fileName File anem, defaults to 'FileName.csv'
    */
   var _curlUrl = function(canonical, fileName) {
-    canonical = canonical || 'CanonicalName'
-    fileName = fileName || 'FileName.csv'
-    return _host + '/import/1/' + _tenant + '/' + _tag + '/' + canonical + '/' + fileName
+    canonical = canonical || 'CanonicalName';
+    fileName = fileName || 'FileName.csv';
+    return _host + '/import/1/' + _tenant + '/' + _tag + '/' + canonical + '/' + fileName;
   }
   /**
    * Get the id of all FileSourceCollection not made by 'authorizer' (default ones).
@@ -115,8 +121,8 @@ function CurlMaker(){
    */
   var _allFileSourceCollection = function() {
     //Get all FileSourceCollections not made by 'authorizer' (default ones)
-    let objs = FileSourceCollection.fetch({filter: 'meta.createdBy!="authorizer"'}).objs || []
-    return objs.map((o)=>o.id)
+    let objs = FileSourceCollection.fetch({filter: 'meta.createdBy!="authorizer"'}).objs || [];
+    return objs.map((o)=>o.id);
   }
   /**
    * Gets all canonicals in the current package.
@@ -125,41 +131,44 @@ function CurlMaker(){
    */
   var _packageCanonicals = function() {
     //Get the root package (deployed package) for the current tag
-    let tag = MetadataStore.tag()
-    let p = tag.rootPackage()
-    p = p.name || null
+    let tag = MetadataStore.tag();
+    let p = tag.rootPackage();
+    p = p.name || null;
     //List all types in this package
-    let allTypes = p ? tag.typesByPackage(p) : []
+    let allTypes = p ? tag.typesByPackage(p) : [];
     //List all 'canonical' types
-    let cTypes = tag.typesThatMixin({typeName:'Canonical'})
+    let cTypes = tag.typesThatMixin({typeName:'Canonical'});
     //Filter canonicals types down to only ones in current package
-    let typeDict = _.indexBy(allTypes,'typeName')
-    cTypes = cTypes.filter((f)=>{return typeof typeDict[f.typeName] !== 'undefined'})
-    cTypes = cTypes.map((m)=>m.typeName)
-    return cTypes
+    let typeDict = _.indexBy(allTypes,'typeName');
+    cTypes = cTypes.filter((f)=>{return typeof typeDict[f.typeName] !== 'undefined'});
+    cTypes = cTypes.map((m)=>m.typeName);
+    return cTypes;
   }
   /* Make the object that will be returned */
   var curl = {
     contentType: function(_) {
-      if (_) { _contentType = _; return this }
-      return _contentType
+      if (_) { _contentType = _; return this; }
+      return _contentType;
     }
     ,delimiter: function(_) {
-      if (_) { _delimiter = _; return this }
-      return _delimiter
+      if (_) { _delimiter = _; return this; }
+      return _delimiter;
     },c3auth: function(_) {
-      if (_) { _c3auth = _; return this }
-      return _c3auth
+      if (_) { _c3auth = _; return this; }
+      return _c3auth;
+    },use78: function(_) {
+      if (_) { _use78 = _; return this; }
+      return _use78;
     }
   }
   //Expose functions that need to be exposed
-  curl.makeCurl = _makeCurl
-  curl.makeCurls = _makeCurls
-  curl.makeCurlAllFSC = _makeCurlAllFSC
-  curl.makeCurlAllCanonical = _makeCurlAllCanonical
+  curl.makeCurl = _makeCurl;
+  curl.makeCurls = _makeCurls;
+  curl.makeCurlAllFSC = _makeCurlAllFSC;
+  curl.makeCurlAllCanonical = _makeCurlAllCanonical;
   /* Set the returned object's prototype to CurlMaker's prototype
    * All it really does is make instanceof CurlMaker return true */
-  curl.__proto__ = this.__proto__
+  curl.__proto__ = this.__proto__;
   //Return the object
-  return curl
+  return curl;
 }
